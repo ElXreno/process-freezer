@@ -25,14 +25,16 @@ fn main() {
             }
         }
         
-        if procfs::Meminfo::new().unwrap().mem_available.unwrap() >= 4294967296 {
+        if procfs::Meminfo::new().unwrap().mem_available.unwrap() >= 4294967296 /* 4GB */ {
             if !sleeping {
                 println!("Mem available, unfreezing all processes and sleeping");
                 sleeping = true;
             }
             for process in &to_process {
                 if process.stat.state != 'S' {
-                    signal::kill(Pid::from_raw(process.stat.pid), Signal::SIGCONT).unwrap();
+                    if let Err(error) = signal::kill(Pid::from_raw(process.stat.pid), Signal::SIGCONT) {
+                        println!("Failed to send SIGCONT for pid {}! Error: {}", process.stat.pid, error);
+                    }
                 }
             }
             std::thread::sleep(std::time::Duration::from_millis(1500));
@@ -46,7 +48,11 @@ fn main() {
                 std::thread::sleep(std::time::Duration::from_millis(500));
             },
             1 => {
-                signal::kill(Pid::from_raw(to_process.first().unwrap().stat.pid), Signal::SIGCONT).unwrap();
+                if let Some(process) = to_process.first() {
+                    if let Err(error) = signal::kill(Pid::from_raw(process.stat.pid), Signal::SIGCONT) {
+                        println!("Failed to send SIGCONT for pid {}! Error: {}", process.stat.pid, error);
+                    }
+                }
                 
                 std::thread::sleep(std::time::Duration::from_millis(500));
             },
@@ -56,13 +62,17 @@ fn main() {
                 for process in &to_process {
                     if process.stat.pid != max.stat.pid && process.stat.state != 'T'{
                         println!("Freezing {}", process.stat.pid);
-                        signal::kill(Pid::from_raw(process.stat.pid), Signal::SIGSTOP).unwrap();
+                        if let Err(error) = signal::kill(Pid::from_raw(process.stat.pid), Signal::SIGSTOP) {
+                            println!("Failed to send SIGSTOP for pid {}! Error: {}", max.stat.pid, error);
+                        }
                     }
                 }
                 
                 if max.stat.state != 'S' {
                     println!("Unfreezing {}", max.stat.pid);
-                    signal::kill(Pid::from_raw(max.stat.pid), Signal::SIGCONT).unwrap();
+                    if let Err(error) = signal::kill(Pid::from_raw(max.stat.pid), Signal::SIGCONT) {
+                        println!("Failed to send SIGCONT for pid {}! Error: {}", max.stat.pid, error);
+                    }
                 }
                 
                 std::thread::sleep(std::time::Duration::from_millis(500));
